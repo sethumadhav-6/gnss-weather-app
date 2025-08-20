@@ -296,6 +296,86 @@
             document.getElementById('current-time').textContent = now.toLocaleTimeString();
         }
         
+        function retryLocationAccess() {
+            // Clear any cached permissions
+            if ('permissions' in navigator) {
+                navigator.permissions.query({name: 'geolocation'}).then(function(result) {
+                    console.log('Current permission status:', result.state);
+                    if (result.state === 'denied') {
+                        showLocationHelp();
+                        return;
+                    }
+                    getCurrentLocation();
+                });
+            } else {
+                getCurrentLocation();
+            }
+        }
+        
+        function showLocationHelp() {
+            const helpHtml = `
+                <div style="background: rgba(255,255,255,0.1); padding: 15px; border-radius: 10px; margin: 10px 0; line-height: 1.4;">
+                    <h4 style="color: #00ff88; margin-bottom: 10px;">📱 Location Access Help</h4>
+                    
+                    <div style="margin-bottom: 15px;">
+                        <strong>🔐 Browser Security Requirements:</strong><br>
+                        • Must use HTTPS (✅ your site has this)<br>
+                        • Must click "Allow" when prompted<br>
+                        • Must have device location services enabled
+                    </div>
+                    
+                    <div style="margin-bottom: 15px;">
+                        <strong>📱 Mobile Browser Steps:</strong><br>
+                        <strong>Chrome:</strong> Look for location icon in address bar<br>
+                        <strong>Safari:</strong> Check Settings → Privacy & Security → Location Services<br>
+                        <strong>Firefox:</strong> Allow in popup, check about:preferences#privacy
+                    </div>
+                    
+                    <div style="margin-bottom: 15px;">
+                        <strong>⚙️ Device Settings:</strong><br>
+                        • Enable Location Services in phone settings<br>
+                        • Allow browser app to use location<br>
+                        • Check if Battery Saver is blocking location
+                    </div>
+                    
+                    <div style="color: #ffaa00;">
+                        <strong>💡 Note:</strong> The app works perfectly with simulated data for demonstration purposes!
+                    </div>
+                    
+                    <div style="margin-top: 15px;">
+                        <button class="btn btn-primary" onclick="checkBrowserCompatibility()" style="padding: 8px 16px; font-size: 0.8em;">
+                            🔍 Check Browser Compatibility
+                        </button>
+                    </div>
+                </div>
+            `;
+            
+            document.getElementById('location-info').innerHTML = helpHtml;
+        }
+        
+        function checkBrowserCompatibility() {
+            let compatibility = `
+                <div style="background: rgba(0,0,0,0.3); padding: 15px; border-radius: 10px; font-family: monospace; font-size: 0.9em;">
+                    <h4 style="color: #00aaff; margin-bottom: 10px;">🔍 Browser Diagnostic</h4>
+                    
+                    <div><strong>Protocol:</strong> ${window.location.protocol} ${window.location.protocol === 'https:' ? '✅' : '❌'}</div>
+                    <div><strong>Geolocation API:</strong> ${'geolocation' in navigator ? '✅ Supported' : '❌ Not supported'}</div>
+                    <div><strong>Permissions API:</strong> ${'permissions' in navigator ? '✅ Supported' : '⚠️ Limited support'}</div>
+                    <div><strong>User Agent:</strong> ${navigator.userAgent.substring(0, 100)}...</div>
+                    <div><strong>Language:</strong> ${navigator.language}</div>
+                    <div><strong>Platform:</strong> ${navigator.platform}</div>
+                    <div><strong>Cookie Enabled:</strong> ${navigator.cookieEnabled ? '✅' : '❌'}</div>
+                    <div><strong>Online:</strong> ${navigator.onLine ? '✅' : '❌'}</div>
+                </div>
+                
+                <button class="btn btn-secondary" onclick="requestLocationPermission()" style="margin-top: 10px; padding: 8px 16px; font-size: 0.8em;">
+                    🔄 Try Location Request Again
+                </button>
+            `;
+            
+            document.getElementById('location-info').innerHTML = compatibility;
+        }
+        
         function requestLocationPermission() {
             // Hide the prompt once user clicks
             const prompt = document.getElementById('location-prompt');
@@ -353,21 +433,28 @@
         function getCurrentLocation() {
             const options = {
                 enableHighAccuracy: true,
-                timeout: 10000,
-                maximumAge: 60000
+                timeout: 15000,
+                maximumAge: 0  // Force fresh location
             };
             
             document.getElementById('gps-status').innerHTML = '📍 GPS: <span class="loading"></span> Please allow location access...';
             
+            // Debug information
+            console.log('Requesting location with options:', options);
+            console.log('User agent:', navigator.userAgent);
+            console.log('HTTPS:', window.location.protocol === 'https:');
+            
             navigator.geolocation.getCurrentPosition(
                 function(position) {
+                    console.log('Location success:', position);
                     const lat = position.coords.latitude.toFixed(6);
                     const lon = position.coords.longitude.toFixed(6);
                     const accuracy = position.coords.accuracy.toFixed(1);
+                    const timestamp = new Date(position.timestamp).toLocaleString();
                     
                     document.getElementById('gps-status').innerHTML = '📍 GPS: ✅ Active (Real Location)';
                     document.getElementById('location-info').innerHTML = 
-                        `🌍 Location: <div class="coordinates">Lat: ${lat}°<br>Lon: ${lon}°<br>Accuracy: ±${accuracy}m</div>`;
+                        `🌍 Location: <div class="coordinates">Lat: ${lat}°<br>Lon: ${lon}°<br>Accuracy: ±${accuracy}m<br>Time: ${timestamp}</div>`;
                     
                     isMonitoring = true;
                     startDataCollection();
@@ -376,270 +463,23 @@
                     watchPosition();
                 },
                 function(error) {
+                    console.log('Geolocation error details:', error);
                     let errorMsg = 'Unknown error';
+                    let troubleshootMsg = '';
+                    
                     switch(error.code) {
                         case error.PERMISSION_DENIED:
-                            errorMsg = 'Location access denied by user';
+                            errorMsg = 'Permission denied';
+                            troubleshootMsg = '• Check browser settings for location permissions<br>• Look for shield/lock icon in address bar<br>• Try refreshing page and allowing again<br>• Clear browser cache and try again';
                             break;
                         case error.POSITION_UNAVAILABLE:
-                            errorMsg = 'Location information unavailable';
+                            errorMsg = 'Location unavailable';
+                            troubleshootMsg = '• GPS may be disabled on device<br>• Try moving to area with better signal<br>• Check device location settings';
                             break;
                         case error.TIMEOUT:
-                            errorMsg = 'Location request timeout';
+                            errorMsg = 'Request timeout';
+                            troubleshootMsg = '• GPS signal too weak<br>• Try again in a few seconds<br>• Move closer to window or outdoors';
                             break;
                     }
-                    console.log('Geolocation error:', errorMsg);
-                    handleLocationError(errorMsg);
-                },
-                options
-            );
-        }
-        
-        function handleLocationError(errorMsg) {
-            document.getElementById('gps-status').innerHTML = `📍 GPS: ⚠️ ${errorMsg}`;
-            document.getElementById('location-info').innerHTML = 
-                `🌍 Location: <div class="coordinates">Using simulated location<br>Click "Allow Location" in browser if available</div>`;
-            // Continue with simulated data
-            simulateGNSSData();
-        }
-        
-        function watchPosition() {
-            const options = {
-                enableHighAccuracy: true,
-                timeout: 15000,
-                maximumAge: 30000
-            };
-            
-            navigator.geolocation.watchPosition(
-                function(position) {
-                    const lat = position.coords.latitude.toFixed(6);
-                    const lon = position.coords.longitude.toFixed(6);
-                    const accuracy = position.coords.accuracy.toFixed(1);
-                    const timestamp = new Date(position.timestamp).toLocaleTimeString();
                     
-                    document.getElementById('location-info').innerHTML = 
-                        `🌍 Location: <div class="coordinates">Lat: ${lat}°<br>Lon: ${lon}°<br>Accuracy: ±${accuracy}m<br>Updated: ${timestamp}</div>`;
-                },
-                function(error) {
-                    console.log('Watch position error:', error.message);
-                },
-                options
-            );
-        }
-        
-        function simulateGNSSData() {
-            // Use simulated coordinates for demonstration
-            document.getElementById('location-info').innerHTML = 
-                `🌍 Location: <div class="coordinates">Lat: 40.7128°<br>Lon: -74.0060°<br>Accuracy: ±5.0m</div> (Simulated)`;
-            isMonitoring = true;
-            startDataCollection();
-        }
-        
-        function generateSatellites() {
-            const constellations = ['GPS', 'GLONASS', 'Galileo', 'BeiDou'];
-            simulatedSatellites = [];
-            
-            for (let i = 0; i < 12; i++) {
-                const constellation = constellations[Math.floor(Math.random() * constellations.length)];
-                const prn = Math.floor(Math.random() * 32) + 1;
-                simulatedSatellites.push({
-                    id: `${constellation}-${prn}`,
-                    constellation: constellation,
-                    elevation: Math.random() * 90,
-                    azimuth: Math.random() * 360,
-                    signalStrength: 30 + Math.random() * 20,
-                    delay: Math.random() * 100 + 50
-                });
-            }
-            
-            updateSatelliteDisplay();
-        }
-        
-        function updateSatelliteDisplay() {
-            const grid = document.getElementById('satellite-grid');
-            grid.innerHTML = '';
-            
-            simulatedSatellites.forEach(sat => {
-                const satDiv = document.createElement('div');
-                satDiv.className = 'satellite';
-                satDiv.innerHTML = `
-                    <div style="font-size: 0.8em; font-weight: bold;">${sat.id}</div>
-                    <div class="signal-strength">
-                        <div class="signal-bar" style="width: ${(sat.signalStrength / 50) * 100}%"></div>
-                    </div>
-                    <div style="font-size: 0.7em;">${sat.signalStrength.toFixed(1)} dB</div>
-                `;
-                grid.appendChild(satDiv);
-            });
-            
-            document.getElementById('sat-count').textContent = simulatedSatellites.length;
-        }
-        
-        function startDataCollection() {
-            setInterval(() => {
-                if (isMonitoring) {
-                    updateAtmosphericData();
-                    updateDisplay();
-                    updateNetworkData();
-                }
-            }, 2000);
-        }
-        
-        function updateAtmosphericData() {
-            // Simulate realistic GNSS atmospheric measurements
-            weatherData.troposphericDelay = 50 + Math.random() * 100;
-            weatherData.ionosphericDelay = 10 + Math.random() * 30;
-            weatherData.waterVapor = Math.random() * 50;
-            
-            // Calculate precipitation probability based on delays
-            const totalDelay = weatherData.troposphericDelay + weatherData.ionosphericDelay;
-            weatherData.precipitationProb = Math.min(100, Math.max(0, (totalDelay - 80) * 2));
-            
-            // Update satellite signal strengths based on atmospheric conditions
-            simulatedSatellites.forEach(sat => {
-                const atmosphericLoss = weatherData.precipitationProb / 100 * 15;
-                sat.signalStrength = Math.max(15, sat.signalStrength - atmosphericLoss + (Math.random() - 0.5) * 2);
-                sat.delay = 50 + weatherData.troposphericDelay + Math.random() * 20;
-            });
-            
-            updateSatelliteDisplay();
-        }
-        
-        function updateDisplay() {
-            document.getElementById('tropo-delay').textContent = weatherData.troposphericDelay.toFixed(1) + ' ns';
-            document.getElementById('iono-delay').textContent = weatherData.ionosphericDelay.toFixed(1) + ' ns';
-            document.getElementById('water-vapor').textContent = weatherData.waterVapor.toFixed(1) + ' mm';
-            document.getElementById('precip-prob').textContent = weatherData.precipitationProb.toFixed(0) + '%';
-            
-            const pressure = 1013.25 - (weatherData.precipitationProb / 100) * 20;
-            document.getElementById('pressure').textContent = pressure.toFixed(2) + ' hPa';
-            
-            const humidity = 45 + (weatherData.waterVapor / 50) * 55;
-            document.getElementById('humidity').textContent = humidity.toFixed(0) + '%';
-            
-            // Weather condition logic
-            let condition = 'Clear';
-            if (weatherData.precipitationProb > 70) condition = 'Heavy Rain Expected';
-            else if (weatherData.precipitationProb > 40) condition = 'Rain Likely';
-            else if (weatherData.precipitationProb > 20) condition = 'Cloudy';
-            
-            document.getElementById('weather-condition').textContent = condition;
-            
-            // Signal quality assessment
-            const avgSignal = simulatedSatellites.reduce((sum, sat) => sum + sat.signalStrength, 0) / simulatedSatellites.length;
-            let quality = 'Excellent';
-            if (avgSignal < 35) quality = 'Poor';
-            else if (avgSignal < 40) quality = 'Fair';
-            else if (avgSignal < 45) quality = 'Good';
-            
-            document.getElementById('signal-quality').textContent = quality;
-            
-            updateWeatherAlerts();
-            updateVisualization();
-        }
-        
-        function updateWeatherAlerts() {
-            const alertDiv = document.getElementById('weather-alerts');
-            alertDiv.innerHTML = '';
-            
-            if (weatherData.precipitationProb > 60) {
-                const alert = document.createElement('div');
-                alert.className = 'alert';
-                alert.innerHTML = '🚨 HIGH PRECIPITATION PROBABILITY DETECTED<br>Signal degradation indicates incoming weather system';
-                alertDiv.appendChild(alert);
-            }
-            
-            if (simulatedSatellites.some(sat => sat.signalStrength < 25)) {
-                const alert = document.createElement('div');
-                alert.className = 'alert';
-                alert.innerHTML = '⚠️ SIGNAL ATTENUATION DETECTED<br>Heavy atmospheric interference present';
-                alertDiv.appendChild(alert);
-            }
-        }
-        
-        function updateNetworkData() {
-            const nodes = 1 + Math.floor(Math.random() * 8);
-            const radius = 3.5 + Math.random() * 4;
-            const accuracy = 1.5 + Math.random() * 2;
-            const latency = 30 + Math.random() * 40;
-            
-            document.getElementById('network-nodes').textContent = nodes;
-            document.getElementById('coverage-radius').textContent = radius.toFixed(1) + ' km';
-            document.getElementById('data-accuracy').textContent = '±' + accuracy.toFixed(1) + ' mm';
-            document.getElementById('network-latency').textContent = latency.toFixed(0) + ' ms';
-        }
-        
-        function updateVisualization() {
-            const viz = document.getElementById('weather-viz');
-            
-            // Clear existing weather effects
-            const existingRain = viz.querySelectorAll('.rain-particles');
-            existingRain.forEach(drop => drop.remove());
-            
-            const existingClouds = viz.querySelectorAll('.cloud');
-            existingClouds.forEach(cloud => cloud.remove());
-            
-            // Add weather effects based on conditions
-            if (weatherData.precipitationProb > 30) {
-                // Add clouds
-                for (let i = 0; i < 3; i++) {
-                    const cloud = document.createElement('div');
-                    cloud.className = 'cloud';
-                    cloud.style.width = (60 + Math.random() * 40) + 'px';
-                    cloud.style.height = (30 + Math.random() * 20) + 'px';
-                    cloud.style.top = (20 + Math.random() * 100) + 'px';
-                    cloud.style.left = '-100px';
-                    cloud.style.animationDelay = (Math.random() * 10) + 's';
-                    viz.appendChild(cloud);
-                }
-            }
-            
-            if (weatherData.precipitationProb > 50) {
-                // Add rain particles
-                for (let i = 0; i < 20; i++) {
-                    const rain = document.createElement('div');
-                    rain.className = 'rain-particles';
-                    rain.style.left = Math.random() * 100 + '%';
-                    rain.style.animationDelay = Math.random() * 1 + 's';
-                    rain.style.animationDuration = (0.5 + Math.random() * 0.5) + 's';
-                    viz.appendChild(rain);
-                }
-            }
-        }
-        
-        function simulateWeatherEvent() {
-            // Simulate a sudden weather event
-            weatherData.precipitationProb = 80 + Math.random() * 20;
-            weatherData.troposphericDelay = 120 + Math.random() * 50;
-            weatherData.waterVapor = 35 + Math.random() * 15;
-            
-            simulatedSatellites.forEach(sat => {
-                sat.signalStrength = Math.max(15, sat.signalStrength - 10 - Math.random() * 10);
-            });
-            
-            updateDisplay();
-            updateSatelliteDisplay();
-        }
-        
-        function resetSystem() {
-            weatherData = {
-                troposphericDelay: 50,
-                ionosphericDelay: 15,
-                waterVapor: 10,
-                precipitationProb: 5,
-                signalQuality: 'Excellent'
-            };
-            
-            generateSatellites();
-            updateDisplay();
-            
-            // Clear visualization
-            const viz = document.getElementById('weather-viz');
-            viz.querySelectorAll('.rain-particles, .cloud').forEach(el => el.remove());
-        }
-        
-        // Initialize the system when page loads
-        initializeSystem();
-    </script>
-</body>
-</html>
+                   
