@@ -482,4 +482,286 @@
                             break;
                     }
                     
-                   
+                    console.log('Geolocation error:', errorMsg, error.message);
+                    handleLocationError(errorMsg, troubleshootMsg);
+                },
+                options
+            );
+        }
+        
+        function handleLocationError(errorMsg, troubleshootMsg = '') {
+            document.getElementById('gps-status').innerHTML = `📍 GPS: ❌ ${errorMsg}`;
+            
+            let locationHtml = `
+                <div style="color: #ffaa00; margin-bottom: 10px;">
+                    🚨 <strong>Location Error: ${errorMsg}</strong>
+                </div>
+            `;
+            
+            if (troubleshootMsg) {
+                locationHtml += `
+                    <div style="background: rgba(255,170,0,0.1); padding: 10px; border-radius: 8px; font-size: 0.9em; margin-bottom: 10px;">
+                        <strong>Troubleshooting Steps:</strong><br>
+                        ${troubleshootMsg}
+                    </div>
+                `;
+            }
+            
+            locationHtml += `
+                <div class="coordinates">
+                    Using simulated location for demo<br>
+                    <button class="btn btn-secondary" onclick="retryLocationAccess()" style="margin-top: 10px; padding: 8px 16px; font-size: 0.8em;">
+                        🔄 Retry Location Access
+                    </button>
+                    <button class="btn btn-secondary" onclick="showLocationHelp()" style="margin-top: 10px; padding: 8px 16px; font-size: 0.8em;">
+                        ❓ More Help
+                    </button>
+                </div>
+            `;
+            
+            document.getElementById('location-info').innerHTML = locationHtml;
+            
+            // Continue with simulated data
+            simulateGNSSData();
+        }
+        
+        function watchPosition() {
+            const options = {
+                enableHighAccuracy: true,
+                timeout: 15000,
+                maximumAge: 30000
+            };
+            
+            navigator.geolocation.watchPosition(
+                function(position) {
+                    const lat = position.coords.latitude.toFixed(6);
+                    const lon = position.coords.longitude.toFixed(6);
+                    const accuracy = position.coords.accuracy.toFixed(1);
+                    const timestamp = new Date(position.timestamp).toLocaleTimeString();
+                    
+                    document.getElementById('location-info').innerHTML = 
+                        `🌍 Location: <div class="coordinates">Lat: ${lat}°<br>Lon: ${lon}°<br>Accuracy: ±${accuracy}m<br>Updated: ${timestamp}</div>`;
+                },
+                function(error) {
+                    console.log('Watch position error:', error.message);
+                },
+                options
+            );
+        }
+        
+        function simulateGNSSData() {
+            // Use simulated coordinates for demonstration
+            document.getElementById('location-info').innerHTML = 
+                `🌍 Location: <div class="coordinates">Lat: 40.7128°<br>Lon: -74.0060°<br>Accuracy: ±5.0m</div> (Simulated)`;
+            isMonitoring = true;
+            startDataCollection();
+        }
+        
+        function generateSatellites() {
+            const constellations = ['GPS', 'GLONASS', 'Galileo', 'BeiDou'];
+            simulatedSatellites = [];
+            
+            for (let i = 0; i < 12; i++) {
+                const constellation = constellations[Math.floor(Math.random() * constellations.length)];
+                const prn = Math.floor(Math.random() * 32) + 1;
+                simulatedSatellites.push({
+                    id: `${constellation}-${prn}`,
+                    constellation: constellation,
+                    elevation: Math.random() * 90,
+                    azimuth: Math.random() * 360,
+                    signalStrength: 30 + Math.random() * 20,
+                    delay: Math.random() * 100 + 50
+                });
+            }
+            
+            updateSatelliteDisplay();
+        }
+        
+        function updateSatelliteDisplay() {
+            const grid = document.getElementById('satellite-grid');
+            grid.innerHTML = '';
+            
+            simulatedSatellites.forEach(sat => {
+                const satDiv = document.createElement('div');
+                satDiv.className = 'satellite';
+                satDiv.innerHTML = `
+                    <div style="font-size: 0.8em; font-weight: bold;">${sat.id}</div>
+                    <div class="signal-strength">
+                        <div class="signal-bar" style="width: ${(sat.signalStrength / 50) * 100}%"></div>
+                    </div>
+                    <div style="font-size: 0.7em;">${sat.signalStrength.toFixed(1)} dB</div>
+                `;
+                grid.appendChild(satDiv);
+            });
+            
+            document.getElementById('sat-count').textContent = simulatedSatellites.length;
+        }
+        
+        function startDataCollection() {
+            setInterval(() => {
+                if (isMonitoring) {
+                    updateAtmosphericData();
+                    updateDisplay();
+                    updateNetworkData();
+                }
+            }, 2000);
+        }
+        
+        function updateAtmosphericData() {
+            // Simulate realistic GNSS atmospheric measurements
+            weatherData.troposphericDelay = 50 + Math.random() * 100;
+            weatherData.ionosphericDelay = 10 + Math.random() * 30;
+            weatherData.waterVapor = Math.random() * 50;
+            
+            // Calculate precipitation probability based on delays
+            const totalDelay = weatherData.troposphericDelay + weatherData.ionosphericDelay;
+            weatherData.precipitationProb = Math.min(100, Math.max(0, (totalDelay - 80) * 2));
+            
+            // Update satellite signal strengths based on atmospheric conditions
+            simulatedSatellites.forEach(sat => {
+                const atmosphericLoss = weatherData.precipitationProb / 100 * 15;
+                sat.signalStrength = Math.max(15, sat.signalStrength - atmosphericLoss + (Math.random() - 0.5) * 2);
+                sat.delay = 50 + weatherData.troposphericDelay + Math.random() * 20;
+            });
+            
+            updateSatelliteDisplay();
+        }
+        
+        function updateDisplay() {
+            document.getElementById('tropo-delay').textContent = weatherData.troposphericDelay.toFixed(1) + ' ns';
+            document.getElementById('iono-delay').textContent = weatherData.ionosphericDelay.toFixed(1) + ' ns';
+            document.getElementById('water-vapor').textContent = weatherData.waterVapor.toFixed(1) + ' mm';
+            document.getElementById('precip-prob').textContent = weatherData.precipitationProb.toFixed(0) + '%';
+            
+            const pressure = 1013.25 - (weatherData.precipitationProb / 100) * 20;
+            document.getElementById('pressure').textContent = pressure.toFixed(2) + ' hPa';
+            
+            const humidity = 45 + (weatherData.waterVapor / 50) * 55;
+            document.getElementById('humidity').textContent = humidity.toFixed(0) + '%';
+            
+            // Weather condition logic
+            let condition = 'Clear';
+            if (weatherData.precipitationProb > 70) condition = 'Heavy Rain Expected';
+            else if (weatherData.precipitationProb > 40) condition = 'Rain Likely';
+            else if (weatherData.precipitationProb > 20) condition = 'Cloudy';
+            
+            document.getElementById('weather-condition').textContent = condition;
+            
+            // Signal quality assessment
+            const avgSignal = simulatedSatellites.reduce((sum, sat) => sum + sat.signalStrength, 0) / simulatedSatellites.length;
+            let quality = 'Excellent';
+            if (avgSignal < 35) quality = 'Poor';
+            else if (avgSignal < 40) quality = 'Fair';
+            else if (avgSignal < 45) quality = 'Good';
+            
+            document.getElementById('signal-quality').textContent = quality;
+            
+            updateWeatherAlerts();
+            updateVisualization();
+        }
+        
+        function updateWeatherAlerts() {
+            const alertDiv = document.getElementById('weather-alerts');
+            alertDiv.innerHTML = '';
+            
+            if (weatherData.precipitationProb > 60) {
+                const alert = document.createElement('div');
+                alert.className = 'alert';
+                alert.innerHTML = '🚨 HIGH PRECIPITATION PROBABILITY DETECTED<br>Signal degradation indicates incoming weather system';
+                alertDiv.appendChild(alert);
+            }
+            
+            if (simulatedSatellites.some(sat => sat.signalStrength < 25)) {
+                const alert = document.createElement('div');
+                alert.className = 'alert';
+                alert.innerHTML = '⚠️ SIGNAL ATTENUATION DETECTED<br>Heavy atmospheric interference present';
+                alertDiv.appendChild(alert);
+            }
+        }
+        
+        function updateNetworkData() {
+            const nodes = 1 + Math.floor(Math.random() * 8);
+            const radius = 3.5 + Math.random() * 4;
+            const accuracy = 1.5 + Math.random() * 2;
+            const latency = 30 + Math.random() * 40;
+            
+            document.getElementById('network-nodes').textContent = nodes;
+            document.getElementById('coverage-radius').textContent = radius.toFixed(1) + ' km';
+            document.getElementById('data-accuracy').textContent = '±' + accuracy.toFixed(1) + ' mm';
+            document.getElementById('network-latency').textContent = latency.toFixed(0) + ' ms';
+        }
+        
+        function updateVisualization() {
+            const viz = document.getElementById('weather-viz');
+            
+            // Clear existing weather effects
+            const existingRain = viz.querySelectorAll('.rain-particles');
+            existingRain.forEach(drop => drop.remove());
+            
+            const existingClouds = viz.querySelectorAll('.cloud');
+            existingClouds.forEach(cloud => cloud.remove());
+            
+            // Add weather effects based on conditions
+            if (weatherData.precipitationProb > 30) {
+                // Add clouds
+                for (let i = 0; i < 3; i++) {
+                    const cloud = document.createElement('div');
+                    cloud.className = 'cloud';
+                    cloud.style.width = (60 + Math.random() * 40) + 'px';
+                    cloud.style.height = (30 + Math.random() * 20) + 'px';
+                    cloud.style.top = (20 + Math.random() * 100) + 'px';
+                    cloud.style.left = '-100px';
+                    cloud.style.animationDelay = (Math.random() * 10) + 's';
+                    viz.appendChild(cloud);
+                }
+            }
+            
+            if (weatherData.precipitationProb > 50) {
+                // Add rain particles
+                for (let i = 0; i < 20; i++) {
+                    const rain = document.createElement('div');
+                    rain.className = 'rain-particles';
+                    rain.style.left = Math.random() * 100 + '%';
+                    rain.style.animationDelay = Math.random() * 1 + 's';
+                    rain.style.animationDuration = (0.5 + Math.random() * 0.5) + 's';
+                    viz.appendChild(rain);
+                }
+            }
+        }
+        
+        function simulateWeatherEvent() {
+            // Simulate a sudden weather event
+            weatherData.precipitationProb = 80 + Math.random() * 20;
+            weatherData.troposphericDelay = 120 + Math.random() * 50;
+            weatherData.waterVapor = 35 + Math.random() * 15;
+            
+            simulatedSatellites.forEach(sat => {
+                sat.signalStrength = Math.max(15, sat.signalStrength - 10 - Math.random() * 10);
+            });
+            
+            updateDisplay();
+            updateSatelliteDisplay();
+        }
+        
+        function resetSystem() {
+            weatherData = {
+                troposphericDelay: 50,
+                ionosphericDelay: 15,
+                waterVapor: 10,
+                precipitationProb: 5,
+                signalQuality: 'Excellent'
+            };
+            
+            generateSatellites();
+            updateDisplay();
+            
+            // Clear visualization
+            const viz = document.getElementById('weather-viz');
+            viz.querySelectorAll('.rain-particles, .cloud').forEach(el => el.remove());
+        }
+        
+        // Initialize the system when page loads
+        initializeSystem();
+    </script>
+</body>
+</html>
